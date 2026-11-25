@@ -1,0 +1,47 @@
+<resources>
+    <string name="app_name">ReplyFlow</string>
+    <string name="notification_listener_label">ReplyFlow WhatsApp Listener</string>
+
+    <!-- Navigation -->
+    <string name="nav_dashboard">Hub</string>
+    <string name="nav_knowledge">PDF RAG</string>
+    <string name="nav_flow">Flow</string>
+    <string name="nav_inbox">Chats</string>
+
+    <!-- Dashboard -->
+    <string name="dashboard_subtitle">WhatsApp RAG &amp; Guardrail Engine</string>
+    <string name="engine_active">Automation Active</string>
+    <string name="engine_paused">Automation Paused</string>
+    <string name="listener_connected">Notification Access Connected</string>
+    <string name="listener_disconnected">Notification Access Needed</string>
+    <string name="listener_setup_action">Grant Access</string>
+    <string name="handoff_alert_title">Human Agent Needed</string>
+    <string name="handoff_alert_action">Open Queue</string>
+    <string name="test_pipeline_cta">Test Flow</string>
+
+    <!-- Knowledge Base -->
+    <string name="knowledge_title">PDF Knowledge Base</string>
+    <string name="knowledge_import_pdf">Import PDF</string>
+    <string name="knowledge_generate_sample">Create Sample PDF</string>
+    <string name="knowledge_empty_title">No PDF documents indexed yet</string>
+    <string name="knowledge_empty_desc">Import product manuals, FAQs, or policies so Gemini can answer WhatsApp messages with grounded facts.</string>
+
+    <!-- Flow Manager -->
+    <string name="flow_title">Flow Manager</string>
+    <string name="flow_node_trigger">1. WhatsApp Notification Trigger</string>
+    <string name="flow_node_guardrail">2. Human Handoff Guardrail</string>
+    <string name="flow_node_rag">3. PDF RAG Knowledge Retrieval</string>
+    <string name="flow_node_composer">4. Gemini Response Composer</string>
+
+    <!-- Inbox & Simulator -->
+    <string name="inbox_title">Chats &amp; Handoffs</string>
+    <string name="simulate_message">Simulate Message</string>
+    <string name="send_human_reply">Send as Human Agent</string>
+    <string name="resume_ai">Resume AI</string>
+    <string name="take_over_chat">Take Over</string>
+    <string name="mark_resolved">Resolve</string>
+
+    <!-- Notifications -->
+    <string name="handoff_channel_name">Human Agent Handoffs</string>
+    <string name="handoff_channel_desc">Alerts when a WhatsApp chat is transferred to a live human agent due to frustration or direct request.</string>
+</resources>

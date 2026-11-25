@@ -1,0 +1,8 @@
+{
+  "name": "Remix ReplyFlow",
+  "description": "WhatsApp automated reply manager with PDF RAG knowledge base, Gemini AI responses, and human handoff guardrails.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
