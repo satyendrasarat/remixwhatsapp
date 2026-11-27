@@ -94,6 +94,31 @@ class ReplyFlowRepository(
         return indexStoredPdf(stored)
     }
 
+    suspend fun retryIndexingDocument(doc: PdfDocumentEntity): PdfDocumentEntity {
+        val file = java.io.File(doc.localPath)
+        if (!file.exists()) {
+            throw IllegalStateException("Original PDF file is no longer available on device. Please re-import it.")
+        }
+        val bytes = withContext(Dispatchers.IO) { file.readBytes() }
+        knowledgeDao.updateDocument(
+            doc.copy(
+                summary = "Retrying PDF RAG indexing with Gemini…",
+                indexingStatus = "INDEXING",
+                errorMessage = null
+            )
+        )
+        return runPdfExtractionIntoRow(
+            documentId = doc.id,
+            stored = StoredPdfInfo(
+                fileName = doc.fileName,
+                localPath = doc.localPath,
+                pageCount = doc.pageCount,
+                fileSizeBytes = doc.fileSizeBytes,
+                bytes = bytes
+            )
+        )
+    }
+
     private suspend fun indexStoredPdf(stored: StoredPdfInfo): PdfDocumentEntity {
         val placeholderId = knowledgeDao.insertDocument(
             PdfDocumentEntity(
@@ -107,12 +132,18 @@ class ReplyFlowRepository(
                 indexingStatus = "INDEXING"
             )
         )
+        return runPdfExtractionIntoRow(placeholderId, stored)
+    }
 
+    private suspend fun runPdfExtractionIntoRow(
+        documentId: Long,
+        stored: StoredPdfInfo
+    ): PdfDocumentEntity {
         return try {
             val extracted = geminiEngine.extractPdfKnowledge(stored.bytes, stored.fileName)
             val chunkEntities = extracted.sections.map { section ->
                 KnowledgeChunkEntity(
-                    documentId = placeholderId,
+                    documentId = documentId,
                     documentName = stored.fileName,
                     sectionTitle = section.sectionTitle,
                     pageNumber = section.pageNumber.coerceIn(1, stored.pageCount.coerceAtLeast(1)),
@@ -120,11 +151,11 @@ class ReplyFlowRepository(
                     keywords = section.keywords
                 )
             }
-            knowledgeDao.deleteChunksForDocument(placeholderId)
+            knowledgeDao.deleteChunksForDocument(documentId)
             knowledgeDao.insertChunks(chunkEntities)
 
             val readyDoc = PdfDocumentEntity(
-                id = placeholderId,
+                id = documentId,
                 fileName = stored.fileName,
                 localPath = stored.localPath,
                 pageCount = stored.pageCount,
@@ -142,12 +173,12 @@ class ReplyFlowRepository(
         } catch (e: Exception) {
             Log.e(TAG, "Failed indexing PDF ${stored.fileName}", e)
             val failedDoc = PdfDocumentEntity(
-                id = placeholderId,
+                id = documentId,
                 fileName = stored.fileName,
                 localPath = stored.localPath,
                 pageCount = stored.pageCount,
                 fileSizeBytes = stored.fileSizeBytes,
-                summary = "Indexing failed. Tap retry or remove this document.",
+                summary = "Indexing failed. Tap Retry or remove this document.",
                 chunkCount = 0,
                 isEnabled = false,
                 indexingStatus = "ERROR",

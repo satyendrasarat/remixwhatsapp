@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.PictureAsPdf
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -65,6 +66,7 @@ fun KnowledgeScreen(
     onImportPdfClick: () -> Unit,
     onCreateSamplePdfClick: () -> Unit,
     onToggleDocumentEnabled: (Long, Boolean) -> Unit,
+    onRetryDocument: (PdfDocumentEntity) -> Unit,
     onDeleteDocument: (PdfDocumentEntity) -> Unit,
     observeChunks: (Long) -> Flow<List<KnowledgeChunkEntity>>,
     modifier: Modifier = Modifier
@@ -187,7 +189,9 @@ fun KnowledgeScreen(
                     PdfDocumentCard(
                         doc = doc,
                         chunksFlow = observeChunks(doc.id),
+                        isBusy = isIndexing,
                         onToggleEnabled = { enabled -> onToggleDocumentEnabled(doc.id, enabled) },
+                        onRetry = { onRetryDocument(doc) },
                         onDelete = { onDeleteDocument(doc) }
                     )
                 }
@@ -202,7 +206,9 @@ fun KnowledgeScreen(
 private fun PdfDocumentCard(
     doc: PdfDocumentEntity,
     chunksFlow: Flow<List<KnowledgeChunkEntity>>,
+    isBusy: Boolean,
     onToggleEnabled: (Boolean) -> Unit,
+    onRetry: () -> Unit,
     onDelete: () -> Unit
 ) {
     var expanded by rememberSaveable(doc.id) { mutableStateOf(false) }
@@ -288,7 +294,21 @@ private fun PdfDocumentCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                if (doc.chunkCount > 0) {
+                if (doc.indexingStatus == "ERROR") {
+                    TextButton(
+                        onClick = onRetry,
+                        enabled = !isBusy,
+                        modifier = Modifier.testTag("pdf_retry_${doc.id}")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text("Retry Indexing")
+                    }
+                } else if (doc.chunkCount > 0) {
                     TextButton(
                         onClick = { expanded = !expanded },
                         modifier = Modifier.testTag("pdf_expand_${doc.id}")

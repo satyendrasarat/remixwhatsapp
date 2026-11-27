@@ -8,7 +8,9 @@ import com.example.data.MessageSender
 import com.example.data.RetrievedChunk
 import com.example.data.SentimentLevel
 import com.google.firebase.Firebase
+import com.google.firebase.ai.GenerativeModel
 import com.google.firebase.ai.ai
+import com.google.firebase.ai.type.GenerateContentResponse
 import com.google.firebase.ai.type.Schema
 import com.google.firebase.ai.type.ThinkingLevel
 import com.google.firebase.ai.type.content
@@ -17,15 +19,18 @@ import com.google.firebase.ai.type.thinkingConfig
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import org.json.JSONObject
+import java.util.Locale
 
 private const val TAG = "GeminiFlowEngine"
 private const val FAST_FLOW_MODEL = "gemini-3.5-flash-lite"
 private const val PDF_EXTRACTOR_MODEL = "gemini-3.8-flash"
 private const val PRIMARY_TIMEOUT_MS = 35_000L
-private const val FALLBACK_TIMEOUT_MS = 30_000L
+private const val FALLBACK_TIMEOUT_MS = 35_000L
+private const val RETRY_BACKOFF_MS = 1_800L
 
 data class ExtractedPdfSection(
     val sectionTitle: String,
@@ -177,15 +182,12 @@ class GeminiFlowEngine {
         }
 
         try {
-            val response = try {
-                withTimeout(PRIMARY_TIMEOUT_MS) {
-                    pdfExtractorPrimary.generateContent(requestContent)
-                }
-            } catch (timeout: TimeoutCancellationException) {
-                Log.w(TAG, "Primary PDF model timed out for $fileName, retrying with fast model", timeout)
-                withTimeout(FALLBACK_TIMEOUT_MS) {
-                    pdfExtractorFallback.generateContent(requestContent)
-                }
+            val response = generateWithResilience(
+                operationLabel = "PDF indexing ($fileName)",
+                primary = pdfExtractorPrimary,
+                fallback = pdfExtractorFallback
+            ) { model ->
+                model.generateContent(requestContent)
             }
 
             val rawJson = response.text
@@ -290,15 +292,12 @@ class GeminiFlowEngine {
         """.trimIndent()
 
         try {
-            val response = try {
-                withTimeout(PRIMARY_TIMEOUT_MS) {
-                    flowAssistantPrimary.generateContent(prompt)
-                }
-            } catch (timeout: TimeoutCancellationException) {
-                Log.w(TAG, "Fast flow model timed out, retrying with fallback model", timeout)
-                withTimeout(FALLBACK_TIMEOUT_MS) {
-                    flowAssistantFallback.generateContent(prompt)
-                }
+            val response = generateWithResilience(
+                operationLabel = "Flow analysis ($contactName)",
+                primary = flowAssistantPrimary,
+                fallback = flowAssistantFallback
+            ) { model ->
+                model.generateContent(prompt)
             }
 
             val rawJson = response.text
@@ -342,5 +341,76 @@ class GeminiFlowEngine {
             Log.e(TAG, "Flow analysis failed", e)
             throw IllegalStateException(e.localizedMessage ?: "Gemini flow processing failed.", e)
         }
+    }
+
+    /**
+     * Runs a Gemini request with automatic cross-model fallback and brief backoff retry
+     * when the primary model hits a temporary spike in demand (HTTP 503/429) or timeout.
+     */
+    private suspend fun generateWithResilience(
+        operationLabel: String,
+        primary: GenerativeModel,
+        fallback: GenerativeModel,
+        invoke: suspend (GenerativeModel) -> GenerateContentResponse
+    ): GenerateContentResponse {
+        var lastError: Exception? = null
+
+        val attempts: List<Pair<GenerativeModel, Long>> = listOf(
+            primary to PRIMARY_TIMEOUT_MS,
+            fallback to FALLBACK_TIMEOUT_MS,
+            fallback to FALLBACK_TIMEOUT_MS
+        )
+
+        for ((index, attempt) in attempts.withIndex()) {
+            val (model, timeoutMs) = attempt
+            if (index == 2) {
+                delay(RETRY_BACKOFF_MS)
+            }
+            try {
+                return withTimeout(timeoutMs) {
+                    invoke(model)
+                }
+            } catch (e: TimeoutCancellationException) {
+                Log.w(TAG, "$operationLabel timed out on attempt ${index + 1}/${attempts.size}", e)
+                lastError = e
+            } catch (e: CancellationException) {
+                // Always preserve cooperative coroutine cancellation
+                throw e
+            } catch (e: Exception) {
+                if (!isTransientModelError(e) || index == attempts.lastIndex) {
+                    throw e
+                }
+                Log.w(
+                    TAG,
+                    "$operationLabel hit transient demand/server error on attempt ${index + 1}/${attempts.size}, switching/retrying: ${e.localizedMessage}",
+                    e
+                )
+                lastError = e
+            }
+        }
+
+        throw lastError ?: IllegalStateException("$operationLabel failed after fallback retries.")
+    }
+
+    private fun isTransientModelError(error: Throwable): Boolean {
+        val message = buildString {
+            var current: Throwable? = error
+            while (current != null) {
+                append(' ')
+                append(current.message.orEmpty())
+                current = current.cause
+            }
+        }.lowercase(Locale.ROOT)
+
+        return message.contains("high demand") ||
+            message.contains("503") ||
+            message.contains("429") ||
+            message.contains("unavailable") ||
+            message.contains("overloaded") ||
+            message.contains("resource_exhausted") ||
+            message.contains("temporarily") ||
+            message.contains("try again") ||
+            message.contains("deadline") ||
+            message.contains("rate limit")
     }
 }

@@ -257,6 +257,25 @@ class ReplyFlowViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+    fun retryDocument(doc: PdfDocumentEntity) {
+        viewModelScope.launch {
+            _pdfOperation.value = OperationBanner.Loading("Retrying PDF indexing with Gemini…")
+            try {
+                val indexed = repository.retryIndexingDocument(doc)
+                _pdfOperation.value = OperationBanner.Success(
+                    "Indexed \"${indexed.fileName}\" (${indexed.chunkCount} knowledge chunks ready)"
+                )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e(TAG, "PDF retry indexing failed", e)
+                _pdfOperation.value = OperationBanner.Error(
+                    e.localizedMessage ?: "Unable to index PDF document."
+                )
+            }
+        }
+    }
+
     fun simulateIncomingWhatsApp(contactName: String, messageText: String) {
         val cleanContact = contactName.trim().ifBlank { "Maya Lin" }
         val cleanMessage = messageText.trim()

@@ -298,6 +298,7 @@ fun ReplyFlowApp(
                             onToggleDocumentEnabled = { docId, enabled ->
                                 viewModel.toggleDocumentEnabled(docId, enabled)
                             },
+                            onRetryDocument = { doc -> viewModel.retryDocument(doc) },
                             onDeleteDocument = { doc -> viewModel.deleteDocument(doc) },
                             observeChunks = { docId -> viewModel.observeChunksForDocument(docId) }
                         )

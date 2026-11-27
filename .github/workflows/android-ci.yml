@@ -66,6 +66,13 @@ jobs:
             printf '%s' "$GOOGLE_SERVICES_JSON_BASE64" | base64 -d > app/google-services.json
           fi
 
+      - name: Verify Firebase configuration
+        run: |
+          if [ ! -f app/google-services.json ] || grep -q "remixed-project-id" app/google-services.json; then
+            echo "::error::app/google-services.json is missing or contains placeholder values. Commit a valid app/google-services.json or set the GOOGLE_SERVICES_JSON_BASE64 repository secret."
+            exit 1
+          fi
+
       - name: Run unit tests
         run: gradle :app:testDebugUnitTest --stacktrace
 
